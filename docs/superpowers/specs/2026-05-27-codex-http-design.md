@@ -22,8 +22,7 @@ Request body:
 
 ```json
 {
-  "prompt": "Explain this project",
-  "cwd": "/Volumes/D/web/codex-http"
+  "prompt": "Explain this project"
 }
 ```
 
@@ -31,7 +30,7 @@ Fields:
 
 - `prompt` is required and must be a non-empty string.
 - `cwd` is optional. When omitted, it defaults to the service workspace.
-- `cwd` must resolve inside `/Volumes/D/web/codex-http`.
+- `cwd` must resolve inside the service workspace. It can be used to run Codex from a subdirectory of that workspace.
 
 Success response:
 
