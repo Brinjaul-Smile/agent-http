@@ -62,6 +62,90 @@ test("POST /codex returns runner result", async () => {
   );
 });
 
+test("POST /runs dispatches to requested runner", async () => {
+  const runners = {
+    codex: async () => {
+      throw new Error("codex runner should not be called");
+    },
+    claude: async (body) => ({
+      ok: true,
+      exitCode: 0,
+      output: `claude:${body.prompt}`,
+      stdout: "stdout",
+      stderr: "stderr",
+    }),
+  };
+
+  const server = createServer({ runners });
+  const baseUrl = await listen(server);
+
+  try {
+    const response = await fetch(`${baseUrl}/runs`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ agent: "claude", prompt: "hello" }),
+    });
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(body, {
+      ok: true,
+      exitCode: 0,
+      output: "claude:hello",
+    });
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
+test("POST /runs rejects unknown agent", async () => {
+  const server = createServer({
+    runners: {
+      codex: async () => ({ ok: true }),
+    },
+  });
+  const baseUrl = await listen(server);
+
+  try {
+    const response = await fetch(`${baseUrl}/runs`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ agent: "missing", prompt: "hello" }),
+    });
+    const body = await response.json();
+
+    assert.equal(response.status, 400);
+    assert.deepEqual(body, {
+      ok: false,
+      error: "agent must be one of: codex",
+    });
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
+test("POST /runs default runner list includes claude", async () => {
+  const server = createServer();
+  const baseUrl = await listen(server);
+
+  try {
+    const response = await fetch(`${baseUrl}/runs`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ agent: "missing", prompt: "hello" }),
+    });
+    const body = await response.json();
+
+    assert.equal(response.status, 400);
+    assert.deepEqual(body, {
+      ok: false,
+      error: "agent must be one of: codex, claude",
+    });
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
 test("POST /codex returns debug output when requested", async () => {
   await withServer(
     async (body) => ({

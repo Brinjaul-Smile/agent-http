@@ -3,6 +3,8 @@ const fs = require("node:fs/promises");
 const os = require("node:os");
 const path = require("node:path");
 
+const { waitForChild } = require("./process-runner");
+
 const DEFAULT_TIMEOUT_MS = 10 * 60 * 1000;
 const DEFAULT_WORKSPACE_ROOT = path.resolve(__dirname, "..");
 
@@ -54,42 +56,6 @@ async function cleanupFile(filePath) {
       throw error;
     }
   }
-}
-
-function waitForChild(child, prompt, timeoutMs) {
-  return new Promise((resolve, reject) => {
-    let stdout = "";
-    let stderr = "";
-    let timedOut = false;
-
-    const timeout = setTimeout(() => {
-      timedOut = true;
-      child.kill("SIGTERM");
-    }, timeoutMs);
-
-    child.stdout.setEncoding("utf8");
-    child.stderr.setEncoding("utf8");
-
-    child.stdout.on("data", (chunk) => {
-      stdout += chunk;
-    });
-
-    child.stderr.on("data", (chunk) => {
-      stderr += chunk;
-    });
-
-    child.on("error", (error) => {
-      clearTimeout(timeout);
-      reject(error);
-    });
-
-    child.on("close", (exitCode, signal) => {
-      clearTimeout(timeout);
-      resolve({ exitCode, signal, stdout, stderr, timedOut });
-    });
-
-    child.stdin.end(prompt);
-  });
 }
 
 async function runCodex(body, options = {}) {

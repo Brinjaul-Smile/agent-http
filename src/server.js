@@ -1,5 +1,6 @@
 const http = require("node:http");
 
+const { runClaude } = require("./claude-runner");
 const { RequestError, runCodex } = require("./codex-runner");
 
 const DEFAULT_HOST = "127.0.0.1";
@@ -76,8 +77,20 @@ function formatCodexResult(result, includeDebug = false) {
   return response;
 }
 
+function selectRunner(body, runners) {
+  const agent = body.agent;
+  const selectedRunner = runners[agent];
+
+  if (!selectedRunner) {
+    throw new RequestError(`agent must be one of: ${Object.keys(runners).join(", ")}`);
+  }
+
+  return selectedRunner;
+}
+
 function createServer(options = {}) {
   const runner = options.runner || runCodex;
+  const runners = options.runners || { codex: runner, claude: runClaude };
 
   return http.createServer(async (req, res) => {
     const url = new URL(req.url, `http://${req.headers.host || DEFAULT_HOST}`);
@@ -87,7 +100,7 @@ function createServer(options = {}) {
       return;
     }
 
-    if (url.pathname !== "/codex") {
+    if (url.pathname !== "/codex" && url.pathname !== "/runs") {
       sendJson(res, 404, { ok: false, error: "not found" });
       return;
     }
@@ -99,7 +112,8 @@ function createServer(options = {}) {
 
     try {
       const body = await readJsonBody(req);
-      const result = await runner(body);
+      const selectedRunner = url.pathname === "/runs" ? selectRunner(body, runners) : runner;
+      const result = await selectedRunner(body);
       const statusCode = result.timedOut ? 504 : 200;
       sendJson(res, statusCode, formatCodexResult(result, url.searchParams.get("debug") === "1"));
     } catch (error) {
@@ -133,5 +147,6 @@ module.exports = {
   createServer,
   formatCodexResult,
   readJsonBody,
+  selectRunner,
   sendJson,
 };
