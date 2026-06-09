@@ -1,4 +1,4 @@
-# Codex HTTP
+# Agent HTTP
 
 本项目是一个本地 HTTP 服务，用来包装已经安装好的 agent CLI。当前支持：
 

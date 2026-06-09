@@ -46,7 +46,7 @@ function readJsonBody(req) {
   });
 }
 
-function formatCodexResult(result, includeDebug = false) {
+function formatRunResult(result, includeDebug = false) {
   const response = {
     ok: result.ok,
   };
@@ -115,7 +115,7 @@ function createServer(options = {}) {
       const selectedRunner = url.pathname === "/runs" ? selectRunner(body, runners) : runner;
       const result = await selectedRunner(body);
       const statusCode = result.timedOut ? 504 : 200;
-      sendJson(res, statusCode, formatCodexResult(result, url.searchParams.get("debug") === "1"));
+      sendJson(res, statusCode, formatRunResult(result, url.searchParams.get("debug") === "1"));
     } catch (error) {
       if (error instanceof RequestError) {
         sendJson(res, error.statusCode, { ok: false, error: error.message });
@@ -136,7 +136,7 @@ if (require.main === module) {
   const port = Number(process.env.PORT || DEFAULT_PORT);
 
   server.listen(port, host, () => {
-    console.log(`Codex HTTP server listening on http://${host}:${port}`);
+    console.log(`Agent HTTP server listening on http://${host}:${port}`);
   });
 }
 
@@ -145,7 +145,7 @@ module.exports = {
   DEFAULT_PORT,
   MAX_BODY_BYTES,
   createServer,
-  formatCodexResult,
+  formatRunResult,
   readJsonBody,
   selectRunner,
   sendJson,
