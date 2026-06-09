@@ -1,5 +1,6 @@
 const http = require("node:http");
 
+const { DEFAULT_KNOWN_AGENTS, getAgentAvailability } = require("./agent-availability");
 const { runClaude } = require("./claude-runner");
 const { RequestError, runCodex } = require("./codex-runner");
 
@@ -91,12 +92,22 @@ function selectRunner(body, runners) {
 function createServer(options = {}) {
   const runner = options.runner || runCodex;
   const runners = options.runners || { codex: runner, claude: runClaude };
+  const knownAgents = options.knownAgents || options.agentCommands || DEFAULT_KNOWN_AGENTS;
+  const availabilityEnv = options.env || process.env;
+  const getAvailability =
+    options.getAvailability || (() => getAgentAvailability(knownAgents, availabilityEnv));
 
   return http.createServer(async (req, res) => {
     const url = new URL(req.url, `http://${req.headers.host || DEFAULT_HOST}`);
 
     if (req.method === "GET" && url.pathname === "/health") {
       sendJson(res, 200, { ok: true });
+      return;
+    }
+
+    if (req.method === "GET" && url.pathname === "/agents") {
+      const agents = await getAvailability();
+      sendJson(res, 200, { ok: true, agents });
       return;
     }
 

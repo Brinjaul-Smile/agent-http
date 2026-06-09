@@ -8,6 +8,7 @@ const {
   resolveWorkspaceCwd,
   runCodex,
   validatePrompt,
+  RequestError,
 } = require("../src/codex-runner");
 
 function makeTempWorkspace() {
@@ -95,6 +96,28 @@ process.exit(7);
   assert.equal(result.exitCode, 7);
   assert.match(result.error, /codex exited with code 7/);
   assert.equal(result.stderr, "failed badly");
+});
+
+test("runCodex reports clear error when codex is not in PATH", async () => {
+  const workspaceRoot = makeTempWorkspace();
+
+  await assert.rejects(
+    () =>
+      runCodex(
+        { prompt: "hello", cwd: workspaceRoot },
+        {
+          workspaceRoot,
+          env: { ...process.env, PATH: "" },
+          timeoutMs: 5000,
+        },
+      ),
+    (error) => {
+      assert.equal(error instanceof RequestError, true);
+      assert.equal(error.statusCode, 503);
+      assert.equal(error.message, "codex CLI not found in PATH");
+      return true;
+    },
+  );
 });
 
 test("runCodex times out and terminates fake codex", async () => {

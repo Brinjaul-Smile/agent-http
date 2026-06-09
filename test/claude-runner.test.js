@@ -5,6 +5,7 @@ const path = require("node:path");
 const test = require("node:test");
 
 const { runClaude } = require("../src/claude-runner");
+const { RequestError } = require("../src/codex-runner");
 
 function makeTempWorkspace() {
   return fs.mkdtempSync(path.join(os.tmpdir(), "codex-http-test-"));
@@ -45,4 +46,26 @@ process.stdin.on("end", () => {
   assert.equal(result.output, "final:hello");
   assert.equal(result.stdout, '{"result":"final:hello"}');
   assert.equal(result.stderr, "stderr text");
+});
+
+test("runClaude reports clear error when claude is not in PATH", async () => {
+  const workspaceRoot = makeTempWorkspace();
+
+  await assert.rejects(
+    () =>
+      runClaude(
+        { prompt: "hello", cwd: workspaceRoot },
+        {
+          workspaceRoot,
+          env: { ...process.env, PATH: "" },
+          timeoutMs: 5000,
+        },
+      ),
+    (error) => {
+      assert.equal(error instanceof RequestError, true);
+      assert.equal(error.statusCode, 503);
+      assert.equal(error.message, "claude CLI not found in PATH");
+      return true;
+    },
+  );
 });

@@ -44,6 +44,53 @@ curl http://127.0.0.1:8787/health
 {"ok":true}
 ```
 
+## Agent 可用性
+
+`GET /agents` 可以发现当前机器上常见 agent CLI 是否能在服务进程的 `PATH` 中找到。这个接口只检查命令是否存在，不会真正调用模型。
+
+返回字段里有两个状态：
+
+- `name`：agent 名称，也就是 `POST /runs` 中的 `agent` 值。
+- `available`：本机是否检测到了这个 CLI。
+- `supported`：当前 HTTP 服务是否已经支持通过 `POST /runs` 调用这个 agent。
+
+当前 `supported: true` 的 agent 只有 `codex` 和 `claude`。其他主流 CLI 即使被检测到，也会先显示为 `supported: false`，表示发现了但暂时不能通过 `/runs` 执行。
+
+```sh
+curl http://127.0.0.1:8787/agents
+```
+
+响应示例：
+
+```json
+{
+  "ok": true,
+  "agents": [
+    {
+      "name": "codex",
+      "command": "codex",
+      "available": true,
+      "supported": true
+    },
+    {
+      "name": "claude",
+      "command": "claude",
+      "available": false,
+      "supported": true,
+      "error": "claude CLI not found in PATH"
+    },
+    {
+      "name": "gemini",
+      "command": "gemini",
+      "available": true,
+      "supported": false
+    }
+  ]
+}
+```
+
+默认会检测这些常见 agent 命令：`codex`、`claude`、`gemini`、`opencode`、`pi`、`cursor-agent`、`aider`、`amp`、`auggie`、`goose`、`qwen`。
+
 ## 通用调用
 
 推荐使用 `POST /runs`，通过 `agent` 选择要调用的后端：
@@ -92,6 +139,15 @@ prompt 会通过 stdin 传入。响应会读取 Claude JSON 输出中的 `result
   "ok": true,
   "exitCode": 0,
   "output": "pong"
+}
+```
+
+如果对应 CLI 不存在，请求会返回 `503`：
+
+```json
+{
+  "ok": false,
+  "error": "claude CLI not found in PATH"
 }
 ```
 

@@ -1,5 +1,6 @@
 const { spawn } = require("node:child_process");
 
+const { findExecutable } = require("./agent-availability");
 const { waitForChild } = require("./process-runner");
 const {
   DEFAULT_TIMEOUT_MS,
@@ -23,10 +24,15 @@ async function runClaude(body, options = {}) {
   const timeoutMs = options.timeoutMs || DEFAULT_TIMEOUT_MS;
   const prompt = validatePrompt(body);
   const cwd = resolveWorkspaceCwd(body.cwd, workspaceRoot);
+  const env = options.env || process.env;
+
+  if (!(await findExecutable("claude", env))) {
+    throw new RequestError("claude CLI not found in PATH", 503);
+  }
 
   const child = spawn("claude", ["--bare", "-p", "--output-format", "json"], {
     cwd,
-    env: options.env || process.env,
+    env,
     stdio: ["pipe", "pipe", "pipe"],
   });
 

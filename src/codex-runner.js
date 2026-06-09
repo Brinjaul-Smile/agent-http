@@ -3,6 +3,7 @@ const fs = require("node:fs/promises");
 const os = require("node:os");
 const path = require("node:path");
 
+const { findExecutable } = require("./agent-availability");
 const { waitForChild } = require("./process-runner");
 
 const DEFAULT_TIMEOUT_MS = 10 * 60 * 1000;
@@ -63,15 +64,20 @@ async function runCodex(body, options = {}) {
   const timeoutMs = options.timeoutMs || DEFAULT_TIMEOUT_MS;
   const prompt = validatePrompt(body);
   const cwd = resolveWorkspaceCwd(body.cwd, workspaceRoot);
+  const env = options.env || process.env;
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-http-"));
   const outputPath = path.join(tempDir, "last-message.txt");
+
+  if (!(await findExecutable("codex", env))) {
+    throw new RequestError("codex CLI not found in PATH", 503);
+  }
 
   const child = spawn(
     "codex",
     ["exec", "--skip-git-repo-check", "-C", cwd, "-o", outputPath, "-"],
     {
       cwd,
-      env: options.env || process.env,
+      env,
       stdio: ["pipe", "pipe", "pipe"],
     },
   );

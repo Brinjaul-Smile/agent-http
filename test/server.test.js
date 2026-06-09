@@ -1,4 +1,7 @@
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const os = require("node:os");
+const path = require("node:path");
 const test = require("node:test");
 
 const { RequestError } = require("../src/codex-runner");
@@ -25,6 +28,12 @@ async function withServer(runner, callback) {
   }
 }
 
+function writeFakeCommand(binDir, command) {
+  const file = path.join(binDir, command);
+  fs.writeFileSync(file, "#!/bin/sh\n", { mode: 0o755 });
+  return file;
+}
+
 test("GET /health returns ok", async () => {
   await withServer(async () => ({ ok: true }), async (baseUrl) => {
     const response = await fetch(`${baseUrl}/health`);
@@ -33,6 +42,100 @@ test("GET /health returns ok", async () => {
     assert.equal(response.status, 200);
     assert.deepEqual(body, { ok: true });
   });
+});
+
+test("GET /agents returns agent availability", async () => {
+  const server = createServer({
+    getAvailability: async () => [
+      {
+        name: "codex",
+        command: "codex",
+        available: true,
+        supported: true,
+      },
+      {
+        name: "claude",
+        command: "claude",
+        available: false,
+        supported: true,
+        error: "claude CLI not found in PATH",
+      },
+    ],
+  });
+  const baseUrl = await listen(server);
+
+  try {
+    const response = await fetch(`${baseUrl}/agents`);
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(body, {
+      ok: true,
+      agents: [
+        {
+          name: "codex",
+          command: "codex",
+          available: true,
+          supported: true,
+        },
+        {
+          name: "claude",
+          command: "claude",
+          available: false,
+          supported: true,
+          error: "claude CLI not found in PATH",
+        },
+      ],
+    });
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
+test("GET /agents discovers known unsupported agents", async () => {
+  const binDir = fs.mkdtempSync(path.join(os.tmpdir(), "agent-http-bin-"));
+  writeFakeCommand(binDir, "codex");
+  writeFakeCommand(binDir, "gemini");
+  const server = createServer({
+    env: { PATH: binDir },
+    knownAgents: {
+      codex: {
+        command: "codex",
+        supported: true,
+      },
+      gemini: {
+        command: "gemini",
+        supported: false,
+      },
+    },
+  });
+  const baseUrl = await listen(server);
+
+  try {
+    const response = await fetch(`${baseUrl}/agents`);
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(body, {
+      ok: true,
+      agents: [
+        {
+          name: "codex",
+          command: "codex",
+          available: true,
+          supported: true,
+        },
+        {
+          name: "gemini",
+          command: "gemini",
+          available: true,
+          supported: false,
+        },
+      ],
+    });
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
 });
 
 test("POST /codex returns runner result", async () => {
@@ -140,6 +243,34 @@ test("POST /runs default runner list includes claude", async () => {
     assert.deepEqual(body, {
       ok: false,
       error: "agent must be one of: codex, claude",
+    });
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
+test("POST /runs maps missing CLI errors to 503", async () => {
+  const server = createServer({
+    runners: {
+      claude: async () => {
+        throw new RequestError("claude CLI not found in PATH", 503);
+      },
+    },
+  });
+  const baseUrl = await listen(server);
+
+  try {
+    const response = await fetch(`${baseUrl}/runs`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ agent: "claude", prompt: "hello" }),
+    });
+    const body = await response.json();
+
+    assert.equal(response.status, 503);
+    assert.deepEqual(body, {
+      ok: false,
+      error: "claude CLI not found in PATH",
     });
   } finally {
     await new Promise((resolve) => server.close(resolve));
